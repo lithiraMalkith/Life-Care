@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import { TiHome } from "react-icons/ti";
 import { RiLogoutBoxFill } from "react-icons/ri";
 import { AiFillMessage } from "react-icons/ai";
@@ -9,10 +9,13 @@ import { IoPersonAddSharp } from "react-icons/io5";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import axios from "axios";
+import { Context } from "../main";
+import "./Sidebar.css";
 
 const Sidebar = () => {
   const [show, setShow] = useState(false);
   const navigateTo = useNavigate();
+  const { setIsAuthenticated } = useContext(Context);
 
   const gotoHome = () => {
     navigateTo("/");
@@ -41,8 +44,16 @@ const Sidebar = () => {
 
   const handleLogout = async () => {
     try {
-      const res = await axios.get("http://localhost:4000/api/v1/user/admin/logout");
+      const res = await axios.get("http://localhost:4000/api/v1/user/admin/logout", {
+        withCredentials: true,
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
       toast.success(res.data.message || "Logged out successfully!");
+      // Update auth state and redirect
+      setIsAuthenticated(false);
       navigateTo("/login"); // redirect to login page
     } catch (err) {
       toast.error(err.response?.data?.message || "Logout failed");

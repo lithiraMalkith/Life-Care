@@ -19,6 +19,7 @@ const AppointmentForm = () => {
     doctorLastName: "",
     address: "",
     hasVisited: false,
+    amount: 500,
   });
 
   const [paymentData, setPaymentData] = useState({
@@ -65,17 +66,17 @@ const AppointmentForm = () => {
 
   // Format card number with spaces
   const formatCardNumber = (value) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    const v = value.replace(/\s+/g, "").replace(/[^0-9]/gi, "");
     const matches = v.match(/\d{4,16}/g);
-    const match = (matches && matches[0]) || '';
+    const match = (matches && matches[0]) || "";
     const parts = [];
-    
+
     for (let i = 0; i < match.length; i += 4) {
       parts.push(match.substring(i, i + 4));
     }
-    
+
     if (parts.length) {
-      return parts.join(' ');
+      return parts.join(" ");
     } else {
       return value;
     }
@@ -83,9 +84,9 @@ const AppointmentForm = () => {
 
   // Format expiry date
   const formatExpiryDate = (value) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    const v = value.replace(/\s+/g, "").replace(/[^0-9]/gi, "");
     if (v.length >= 2) {
-      return v.substring(0, 2) + (v.length > 2 ? '/' + v.substring(2, 4) : '');
+      return v.substring(0, 2) + (v.length > 2 ? "/" + v.substring(2, 4) : "");
     }
     return value;
   };
@@ -131,18 +132,18 @@ const AppointmentForm = () => {
           doctor_lastName: formData.doctorLastName,
           hasVisited: formData.hasVisited,
           address: formData.address,
+          amount: Number(formData.amount),
         }
       );
 
       toast.success(data.message);
-      
+
       // Store appointment data and show payment modal
       setCurrentAppointment({
         id: data.appointment?._id,
-        ...data.appointment
+        ...data.appointment,
       });
       setShowPaymentModal(true);
-
     } catch (error) {
       console.error("Appointment submission error:", error);
       toast.error(error.response?.data?.message || "Failed to book appointment");
@@ -159,15 +160,14 @@ const AppointmentForm = () => {
       } else {
         // Cash payment flow
         setIsSubmitting(true);
-        await axios.post(
-          "http://localhost:4000/api/v1/payment/cash-payment",
-          {
-            amount: 50,
-            appointmentId: currentAppointment.id,
-          }
+        await axios.post("http://localhost:4000/api/v1/payment/cash-payment", {
+          amount: Number(formData.amount),
+          appointmentId: currentAppointment.id,
+        });
+
+        toast.success(
+          "Appointment booked successfully! Please pay at the hospital."
         );
-        
-        toast.success("Appointment booked successfully! Please pay at the hospital.");
         resetForm();
         setShowPaymentModal(false);
         setIsSubmitting(false);
@@ -185,25 +185,24 @@ const AppointmentForm = () => {
 
     // Simulate payment processing
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
       // ALWAYS SUCCESS - No error handling
-      console.log("✅ Payment processed successfully for appointment:", currentAppointment.id);
+      console.log(
+        "✅ Payment processed successfully for appointment:",
+        currentAppointment.id
+      );
 
       // Try to mark appointment as paid, but don't worry if it fails
       try {
-        await axios.post(
-          "http://localhost:4000/api/v1/payment/success",
-          {
-            appointmentId: currentAppointment.id,
-            amount: 50,
-            paymentMethod: "card",
-            transactionId: "TXN_" + Math.random().toString(36).substr(2, 9).toUpperCase()
-          }
-        );
+        await axios.post("http://localhost:4000/api/v1/payment/success", {
+          appointmentId: currentAppointment.id,
+          amount: Number(formData.amount),
+          paymentMethod: "card",
+          transactionId:
+            "TXN_" + Math.random().toString(36).substr(2, 9).toUpperCase(),
+        });
       } catch (apiError) {
-        // Ignore API errors - payment is still successful
         console.log("API call failed but payment is still successful");
       }
 
@@ -211,9 +210,8 @@ const AppointmentForm = () => {
       resetForm();
       setShowPaymentModal(false);
       setShowCardDetails(false);
-      
     } catch (error) {
-      // This block should never execute, but if it does, still show success
+      // Even if something happens, still show success (as before)
       console.log("Payment completed successfully!");
       toast.success("🎉 Payment successful! Your appointment has been confirmed.");
       resetForm();
@@ -240,6 +238,7 @@ const AppointmentForm = () => {
       doctorLastName: "",
       address: "",
       hasVisited: false,
+      amount: 500,
     });
     setPaymentData({
       cardNumber: "",
@@ -261,7 +260,7 @@ const AppointmentForm = () => {
           <div className="appointment-header">
             <div className="header-icon">
               <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
               </svg>
             </div>
             <h2>Book Your Appointment</h2>
@@ -435,15 +434,33 @@ const AppointmentForm = () => {
                   <option value="">
                     {isLoading ? "Loading doctors..." : "Select Doctor"}
                   </option>
-                  {filteredDoctors.map((doc, index) => (
-                    <option
-                      value={`${doc.firstName} ${doc.lastName}`}
-                      key={index}
-                    >
-                      Dr. {doc.firstName} {doc.lastName}
-                    </option>
-                  ))}
+                  {doctors
+                    .filter((doc) => doc.doctrDptmnt === formData.department)
+                    .slice(0, 3)
+                    .map((doc, index) => (
+                      <option
+                        value={`${doc.firstName} ${doc.lastName}`}
+                        key={index}
+                      >
+                        Dr. {doc.firstName} {doc.lastName}
+                      </option>
+                    ))}
                 </select>
+              </div>
+
+              <div className="input-group">
+                <label>Consultation Fee (₹) *</label>
+                <input
+                  type="number"
+                  name="amount"
+                  min="0"
+                  step="50"
+                  value={formData.amount}
+                  onChange={handleInputChange}
+                  placeholder="e.g., 500"
+                  required
+                  className="form-input"
+                />
               </div>
             </div>
 
@@ -498,7 +515,7 @@ const AppointmentForm = () => {
           <div className="payment-modal">
             <div className="payment-header">
               <h3>Complete Your Booking</h3>
-              <button 
+              <button
                 className="close-btn"
                 onClick={() => setShowPaymentModal(false)}
                 disabled={isSubmitting}
@@ -506,13 +523,15 @@ const AppointmentForm = () => {
                 ×
               </button>
             </div>
-            
+
             <div className="payment-details">
               <div className="payment-summary">
                 <h4>Appointment Summary</h4>
                 <div className="summary-item">
                   <span>Doctor:</span>
-                  <span>Dr. {formData.doctorFirstName} {formData.doctorLastName}</span>
+                  <span>
+                    Dr. {formData.doctorFirstName} {formData.doctorLastName}
+                  </span>
                 </div>
                 <div className="summary-item">
                   <span>Department:</span>
@@ -520,11 +539,17 @@ const AppointmentForm = () => {
                 </div>
                 <div className="summary-item">
                   <span>Date:</span>
-                  <span>{new Date(formData.appointmentDate).toLocaleDateString()}</span>
+                  <span>
+                    {formData.appointmentDate
+                      ? new Date(
+                          formData.appointmentDate
+                        ).toLocaleDateString()
+                      : "-"}
+                  </span>
                 </div>
                 <div className="summary-item total">
                   <span>Booking Fee:</span>
-                  <span>$50.00</span>
+                  <span>₹ {Number(formData.amount) || 0}</span>
                 </div>
               </div>
 
@@ -535,20 +560,14 @@ const AppointmentForm = () => {
                   onClick={() => handlePayment("online")}
                   disabled={isSubmitting}
                 >
-                  <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm-4.97 6.03L15.5 9l1.53 1.53L18 9l1.53 1.53L21 9l-1.53 1.53L21 12l-1.53 1.53L18 12l-1.53 1.53L15 12l1.53-1.53zM9 12l1.53 1.53L12 12l1.53 1.53L15 12l-1.53-1.53L15 9l-1.53-1.53L12 9l-1.53-1.53L9 9l1.53 1.53L9 12zM4 12l1.53 1.53L7 12l1.53 1.53L10 12l-1.53-1.53L10 9 8.47 7.47 7 9 5.47 7.47 4 9l1.53 1.53L4 12z"/>
-                  </svg>
                   Pay Online Now (Secure)
                 </button>
-                
+
                 <button
                   className="payment-option-btn cash-payment"
                   onClick={() => handlePayment("cash")}
                   disabled={isSubmitting}
                 >
-                  <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7H15V9H21ZM19 17H15V19H19V17ZM21 13H15V15H21V13ZM3 13H11V15H3V13ZM3 17H11V19H3V17ZM3 9H11V11H3V9ZM3 5V7H11V5H3Z"/>
-                  </svg>
                   Pay at Hospital
                 </button>
 
@@ -567,7 +586,7 @@ const AppointmentForm = () => {
           <div className="payment-modal card-details-modal">
             <div className="payment-header">
               <h3>Enter Card Details</h3>
-              <button 
+              <button
                 className="close-btn"
                 onClick={() => {
                   setShowCardDetails(false);
@@ -578,17 +597,19 @@ const AppointmentForm = () => {
                 ×
               </button>
             </div>
-            
+
             <div className="payment-details">
               <div className="payment-summary">
                 <h4>Payment Summary</h4>
                 <div className="summary-item">
                   <span>Amount:</span>
-                  <span>$50.00</span>
+                  <span>₹ {Number(formData.amount) || 0}</span>
                 </div>
                 <div className="summary-item">
                   <span>Appointment:</span>
-                  <span>Dr. {formData.doctorFirstName} {formData.doctorLastName}</span>
+                  <span>
+                    Dr. {formData.doctorFirstName} {formData.doctorLastName}
+                  </span>
                 </div>
               </div>
 
@@ -601,7 +622,10 @@ const AppointmentForm = () => {
                     value={paymentData.cardNumber}
                     onChange={(e) => {
                       const formatted = formatCardNumber(e.target.value);
-                      setPaymentData(prev => ({...prev, cardNumber: formatted}));
+                      setPaymentData((prev) => ({
+                        ...prev,
+                        cardNumber: formatted,
+                      }));
                     }}
                     placeholder="1234 5678 9012 3456"
                     maxLength="19"
@@ -637,7 +661,10 @@ const AppointmentForm = () => {
                       value={paymentData.expiryDate}
                       onChange={(e) => {
                         const formatted = formatExpiryDate(e.target.value);
-                        setPaymentData(prev => ({...prev, expiryDate: formatted}));
+                        setPaymentData((prev) => ({
+                          ...prev,
+                          expiryDate: formatted,
+                        }));
                       }}
                       placeholder="MM/YY"
                       maxLength="5"
@@ -667,7 +694,9 @@ const AppointmentForm = () => {
 
                 <button
                   type="submit"
-                  className={`submit-btn payment-submit-btn ${isSubmitting ? "loading" : ""}`}
+                  className={`submit-btn payment-submit-btn ${
+                    isSubmitting ? "loading" : ""
+                  }`}
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
@@ -676,7 +705,7 @@ const AppointmentForm = () => {
                       Processing Payment...
                     </>
                   ) : (
-                    "Pay $50.00 Now"
+                    <>Pay ₹ {Number(formData.amount) || 0} Now</>
                   )}
                 </button>
 

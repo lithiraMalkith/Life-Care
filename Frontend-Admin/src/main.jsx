@@ -1,4 +1,4 @@
-import { createContext, StrictMode } from "react";
+import { createContext, StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
 
@@ -6,8 +6,10 @@ import App from "./App.jsx";
 export const Context = createContext({});
 
 const AppWrapper = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   return (
-    <Context.Provider value={{}}>
+    <Context.Provider value={{ isAuthenticated, setIsAuthenticated }}>
       <App />
     </Context.Provider>
   );

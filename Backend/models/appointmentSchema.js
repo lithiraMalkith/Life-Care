@@ -76,6 +76,11 @@ const appointmentSchema = new mongoose.Schema({
         type: String,
         enum: ["Pending", "Accepted", "Rejected"],
         default: "Pending"
+    },
+    amount: {
+        type: Number,
+        required: [true, "Appointment fee amount is required"],
+        min: [0, "Amount cannot be negative"]
     }
     
 

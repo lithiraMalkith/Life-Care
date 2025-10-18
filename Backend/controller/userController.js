@@ -119,6 +119,18 @@ export const getUserDetails = catchAsyncErrors(async (req, res, next) => {
 
 // ------------------- Logout Admin -------------------
 export const logoutAdmin = catchAsyncErrors(async (req, res, next) => {
+
+  // Prevent caching of logout response
+  res.set("Cache-Control", "no-store");
+  res.set("Pragma", "no-cache");
+
+  // Clear auth cookie if used
+  res.clearCookie("token", {
+    httpOnly: true,
+    sameSite: "none",
+    secure: true,
+  });
+  
   res.status(200).json({
     success: true,
     message: "Admin logged out successfully!",

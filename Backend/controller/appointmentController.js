@@ -20,13 +20,18 @@ export const postAppointment = catchAsyncErrors(async (req, res, next) => {
         doctor_firstName,
         doctor_lastName,
         hasVisited,
-        address
+        address,
+        amount
     } = req.body;
 
     // Validate required fields
     if (!patientEmail || !firstName || !lastName || !email || !phone || !aadhar || !dob || !gender ||
-        !appointment_date || !department || !doctor_firstName || !doctor_lastName || !address) {
+        !appointment_date || !department || !doctor_firstName || !doctor_lastName || !address || amount === undefined) {
         return next(new ErrorHandler("Please fill the full form!", 400));
+    }
+
+    if (typeof amount !== 'number' || amount < 0) {
+        return next(new ErrorHandler("Invalid amount provided", 400));
     }
 
     // Find doctor
@@ -61,7 +66,8 @@ export const postAppointment = catchAsyncErrors(async (req, res, next) => {
         hasVisited,
         address,
         doctorId: doctor._id,
-        patientId: patient._id
+        patientId: patient._id,
+        amount
     });
 
     res.status(201).json({

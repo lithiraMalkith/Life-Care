@@ -10,7 +10,7 @@ import userRouter from "./router/userRouter.js";
 import messageRouter from "./router/messageRouter.js";
 import appointmentRouter from "./router/appointmentRouter.js";
 import medicalHistoryRoutes from "./router/medicalHistoryRoutes.js";
- // Add this import
+import { Appointment } from "./models/appointmentSchema.js"; // Added for analytics
 
 config({ path: "./.env" });
 
@@ -83,8 +83,93 @@ app.use("/api/v1/user", userRouter);
 app.use("/api/v1/appointment", appointmentRouter);
 app.use("/api/v1/medical-history", medicalHistoryRoutes);
 
+// Analytics endpoints
+// 1) Daily appointment count
+app.get('/api/v1/analytics/daily-appointments', async (req, res) => {
+  try {
+    const { date } = req.query; // expected format: YYYY-MM-DD (matches appointment_date string)
+    if (!date) return res.status(400).json({ success: false, message: 'date query param is required (YYYY-MM-DD)' });
 
-// Health check route
+    const count = await Appointment.countDocuments({ appointment_date: date });
+    return res.status(200).json({ success: true, date, count });
+  } catch (err) {
+    console.error('daily-appointments error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to get daily appointment count' });
+  }
+});
+
+// 2) Daily income (best-effort: sums Appointment.amount if present; returns 0 otherwise)
+app.get('/api/v1/analytics/daily-income', async (req, res) => {
+  try {
+    const { date } = req.query; // YYYY-MM-DD
+    if (!date) return res.status(400).json({ success: false, message: 'date query param is required (YYYY-MM-DD)' });
+
+    const pipeline = [
+      { $match: { appointment_date: date } },
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ];
+
+    const result = await Appointment.aggregate(pipeline);
+    const total = result.length ? result[0].total || 0 : 0;
+    return res.status(200).json({ success: true, date, totalIncome: total });
+  } catch (err) {
+    console.error('daily-income error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to get daily income' });
+  }
+});
+
+// 3) Most visited doctors within a date range (by total appointments)
+app.get('/api/v1/analytics/most-visited-doctors', async (req, res) => {
+  try {
+    const { start, end, limit = 3 } = req.query; // dates as YYYY-MM-DD
+    const match = {};
+    if (start && end) {
+      match.appointment_date = { $gte: start, $lte: end };
+    }
+
+    const pipeline = [
+      { $match: match },
+      { $group: {
+          _id: "$doctorId",
+          count: { $sum: 1 },
+          firstName: { $first: "$doctor.firstName" },
+          lastName: { $first: "$doctor.lastName" },
+          department: { $first: "$department" }
+      }},
+      { $sort: { count: -1 } },
+      { $limit: Number(limit) }
+    ];
+
+    let topDoctors = await Appointment.aggregate(pipeline);
+
+    // Fallback: if fewer than requested limit are found in range, fill with overall top doctors
+    const lim = Number(limit);
+    if (topDoctors.length < lim) {
+      const excludeIds = topDoctors.map(d => d._id).filter(Boolean);
+      const fallbackMatch = excludeIds.length ? { doctorId: { $nin: excludeIds } } : {};
+      const fallbackPipeline = [
+        { $match: fallbackMatch },
+        { $group: {
+            _id: "$doctorId",
+            count: { $sum: 1 },
+            firstName: { $first: "$doctor.firstName" },
+            lastName: { $first: "$doctor.lastName" },
+            department: { $first: "$department" }
+        }},
+        { $sort: { count: -1 } },
+        { $limit: lim - topDoctors.length }
+      ];
+      const fillers = await Appointment.aggregate(fallbackPipeline);
+      topDoctors = topDoctors.concat(fillers);
+    }
+
+    return res.status(200).json({ success: true, start, end, topDoctors });
+  } catch (err) {
+    console.error('most-visited-doctors error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to get most visited doctors' });
+  }
+});
+
 app.get("/api/v1/health", (req, res) => {
   res.status(200).json({
     success: true,

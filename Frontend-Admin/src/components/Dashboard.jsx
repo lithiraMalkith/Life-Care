@@ -1,231 +1,260 @@
-import React, { useEffect, useState } from "react";
-import Loading from "./loading";
+import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { GoCheckCircleFill } from "react-icons/go";
-import { AiFillCloseCircle } from "react-icons/ai";
 import { toast } from "react-toastify";
+import Loading from "./loading";
 import "./Dashboard.css";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { Bar } from "react-chartjs-2";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
-const Dashboard = ({ userEmail }) => {
-  const [user, setUser] = useState(null);
-  const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-  useEffect(() => {
-    const fetchUserAndAppointments = async () => {
-      try {
-        setLoading(true);
-        setError("");
+const Reports = () => {
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [rangeStart, setRangeStart] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [rangeEnd, setRangeEnd] = useState(() => new Date().toISOString().slice(0, 10));
 
-        // Check if userEmail is provided
-        if (!userEmail) {
-          setError("User email is required to load dashboard");
-          setLoading(false);
-          return;
-        }
+  const [dailyAppointments, setDailyAppointments] = useState(null);
+  const [dailyIncome, setDailyIncome] = useState(null);
+  const [topDoctors, setTopDoctors] = useState([]);
 
-        // Fetch user by email
-        const { data: userData } = await axios.get(
-          `http://localhost:4000/api/v1/user/getbyemail?email=${userEmail}`
-        );
-        
-        if (!userData.user) {
-          setError("User not found with the provided email");
-          setLoading(false);
-          return;
-        }
-        
-        setUser(userData.user);
+  const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
-        // Fetch all appointments
-        const { data: appointmentData } = await axios.get(
-          "http://localhost:4000/api/v1/appointment/getall"
-        );
-        setAppointments(appointmentData.appointments || []);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setError("Error loading dashboard data. Please try again.");
-        setAppointments([]);
-        setUser(null);
-        toast.error("Error loading dashboard data");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const chartRef = useRef(null);
+  const kpiRef = useRef(null);
 
-    fetchUserAndAppointments();
-  }, [userEmail]);
+  const fetchDailyAppointments = async (date) => {
+    const { data } = await axios.get(`http://localhost:4000/api/v1/analytics/daily-appointments`, {
+      params: { date },
+      withCredentials: true,
+    });
+    return data;
+  };
 
-  const updateStatus = async (appointmentId, status) => {
+  const fetchDailyIncome = async (date) => {
+    const { data } = await axios.get(`http://localhost:4000/api/v1/analytics/daily-income`, {
+      params: { date },
+      withCredentials: true,
+    });
+    return data;
+  };
+
+  const fetchTopDoctors = async (start, end, limit = 3) => {
+    const { data } = await axios.get(`http://localhost:4000/api/v1/analytics/most-visited-doctors`, {
+      params: { start, end, limit },
+      withCredentials: true,
+    });
+    return data;
+  };
+
+  const generatePDF = async () => {
     try {
-      const { data } = await axios.put(
-        `http://localhost:4000/api/v1/appointment/update/${appointmentId}`,
-        { status }
-      );
-      setAppointments((prevAppointments) =>
-        prevAppointments.map((appointment) =>
-          appointment._id === appointmentId
-            ? { ...appointment, status }
-            : appointment
-        )
-      );
-      toast.success(data.message);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Error updating status");
+      setPdfLoading(true);
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      let y = 40;
+
+      // Header
+      doc.setFillColor(102, 126, 234);
+      doc.rect(0, 0, pageWidth, 60, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(18);
+      doc.text("Hospital Analytics Report", 40, 40);
+
+      // Meta
+      doc.setTextColor(60, 72, 88);
+      doc.setFontSize(12);
+      y = 90;
+      doc.text(`Daily Date: ${selectedDate}`, 40, y);
+      doc.text(`Range: ${rangeStart} → ${rangeEnd}`, 300, y);
+
+      // KPI cards snapshot (optional): render a mini block
+      y += 30;
+      doc.setDrawColor(226, 232, 240);
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(40, y, pageWidth - 80, 70, 6, 6, "FD");
+      doc.setFontSize(14);
+      doc.setTextColor(45, 55, 72);
+      doc.text(`Daily Appointments: ${dailyAppointments ?? '-'}`, 60, y + 28);
+      doc.text(`Daily Income: ${dailyIncome ?? 0}`, 60, y + 50);
+
+      // Chart image
+      y += 100;
+      if (chartRef.current) {
+        const chart = chartRef.current;
+        // react-chartjs-2 exposes ChartJS instance via chartRef.current
+        const canvas = chart.canvas || chart?.ctx?.canvas || (chart?.chart && chart.chart.canvas);
+        if (canvas) {
+          const canvasImg = canvas.toDataURL("image/png", 1.0);
+          const imgWidth = pageWidth - 80;
+          const imgHeight = (canvas.height / canvas.width) * imgWidth;
+          doc.setFontSize(14);
+          doc.setTextColor(45, 55, 72);
+          doc.text("Most Visited Doctors", 40, y);
+          y += 12;
+          doc.addImage(canvasImg, "PNG", 40, y, imgWidth, imgHeight);
+          y += imgHeight + 20;
+        }
+      }
+
+      // Top doctors list (fallback textual summary)
+      if (topDoctors && topDoctors.length) {
+        doc.setFontSize(12);
+        doc.text("Top Doctors (Name - Visits)", 40, y);
+        y += 16;
+        topDoctors.forEach((d, i) => {
+          doc.text(`${i + 1}. ${d.firstName} ${d.lastName} - ${d.count}`, 40, y);
+          y += 16;
+        });
+      }
+
+      doc.save(`analytics-report-${rangeStart}_to_${rangeEnd}.pdf`);
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      toast.error("Failed to generate PDF report");
+    } finally {
+      setPdfLoading(false);
     }
   };
 
-  if (loading) return <Loading />;
+  const loadReports = async () => {
+    try {
+      setLoading(true);
+      const [apps, income, doctors] = await Promise.all([
+        fetchDailyAppointments(selectedDate),
+        fetchDailyIncome(selectedDate),
+        fetchTopDoctors(rangeStart, rangeEnd, 3),
+      ]);
+      setDailyAppointments(apps?.count ?? 0);
+      setDailyIncome(income?.totalIncome ?? 0);
+      setTopDoctors(doctors?.topDoctors ?? []);
+    } catch (err) {
+      console.error("loadReports error:", err);
+      toast.error(err.response?.data?.message || "Failed to load reports");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  if (error || !user) {
-    return (
-      <div className="dashboard-error">
-        <div className="error-container">
-          <div className="error-icon">
-            <AiFillCloseCircle />
-          </div>
-          <h2>{error || "Please provide a valid user email to load the dashboard."}</h2>
-          <p>Please check if you're properly logged in or contact support.</p>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    loadReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onRefreshClick = (e) => {
+    e.preventDefault();
+    loadReports();
+  };
 
   return (
-    <section className="dashboard page">
-      {/* Welcome Banner */}
-      <div className="dashboard-banner">
-        <div className="welcome-card">
-          <div className="admin-profile">
-            <img src="/doc.png" alt="Admin" className="admin-avatar" />
-            <div className="admin-info">
-              <div className="admin-greeting">
-                <p className="greeting">Hello,</p>
-                <h2 className="admin-name">{`${user.firstName} ${user.lastName}`}</h2>
-              </div>
-              <p className="admin-description">
-                The Life Care Administration panel allows admins to add new
-                administrators, register doctors, and manage patient appointments
-                efficiently.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="stats-card">
-          <div className="stats-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
-            </svg>
-          </div>
-          <div className="stats-content">
-            <p className="stats-label">Total Appointments</p>
-            <h3 className="stats-value">{appointments.length}</h3>
-          </div>
-        </div>
-
-        <div className="departments-card">
-          <div className="departments-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2l-5.5 9h11L12 2zm0 3.84L13.93 9h-3.87L12 5.84zM17.5 13c-2.49 0-4.5 2.01-4.5 4.5s2.01 4.5 4.5 4.5 4.5-2.01 4.5-4.5-2.01-4.5-4.5-4.5zm0 7a2.5 2.5 0 010-5 2.5 2.5 0 010 5zM3 21.5h8v-8H3v8zm2-6h4v4H5v-4z"/>
-            </svg>
-          </div>
-          <div className="departments-content">
-            <p className="departments-label">Departments</p>
-            <div className="departments-list">
-              <span>Pediatrics</span>
-              <span>Orthopedics</span>
-              <span>Cardiology</span>
-              <span>Neurology</span>
-              <span>Oncology</span>
-              <span>Radiology</span>
-              <span>Physical Therapy</span>
-              <span>Dermatology</span>
-              <span>ENT</span>
-            </div>
-          </div>
-        </div>
+    <div className="analytics-container">
+      <div className="analytics-header">
+        <h1>Analytics Reports</h1>
+        <p>Daily KPIs and Top Doctors</p>
       </div>
 
-      {/* Appointments Table */}
-      <div className="appointments-section">
-        <div className="section-header">
-          <h5>Recent Appointments</h5>
-          <span className="appointments-count">{appointments.length} total</span>
+      <form onSubmit={onRefreshClick} className="analytics-form">
+        <div className="analytics-grid">
+          <div className="form-field">
+            <label>Daily Date</label>
+            <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+          </div>
+          <div className="form-field">
+            <label>Range Start</label>
+            <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} />
+          </div>
+          <div className="form-field">
+            <label>Range End</label>
+            <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} />
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? "Generating..." : "Generate"}
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={generatePDF}
+              disabled={pdfLoading}
+              style={{ marginLeft: 8 }}
+              aria-label="Generate PDF report"
+            >
+              {pdfLoading ? "Generating PDF..." : "Generate PDF"}
+            </button>
+          </div>
         </div>
-        
-        <div className="table-container">
-          <table className="appointments-table">
-            <thead>
-              <tr>
-                <th>Patient Name</th>
-                <th>Appointment Date</th>
-                <th>Doctor</th>
-                <th>Department</th>
-                <th>Status</th>
-                <th>Visited</th>
-              </tr>
-            </thead>
-            <tbody>
-              {appointments.length > 0 ? (
-                appointments.map((appointment) => (
-                  <tr key={appointment._id} className="appointment-row">
-                    <td className="patient-name">
-                      {`${appointment.firstName} ${appointment.lastName}`}
-                    </td>
-                    <td className="appointment-date">
-                      {new Date(appointment.appointment_date).toLocaleDateString()}
-                    </td>
-                    <td className="doctor-name">
-                      {appointment.doctor ? 
-                        `${appointment.doctor.firstName} ${appointment.doctor.lastName}` : 
-                        'N/A'
-                      }
-                    </td>
-                    <td className="department">
-                      <span className="department-badge">{appointment.department}</span>
-                    </td>
-                    <td className="status-cell">
-                      <select
-                        className={`status-select status-${appointment.status.toLowerCase()}`}
-                        value={appointment.status}
-                        onChange={(e) =>
-                          updateStatus(appointment._id, e.target.value)
-                        }
-                      >
-                        <option value="Pending">Pending</option>
-                        <option value="Accepted">Accepted</option>
-                        <option value="Rejected">Rejected</option>
-                      </select>
-                    </td>
-                    <td className="visited-cell">
-                      {appointment.hasVisited ? (
-                        <GoCheckCircleFill className="icon-visited" />
-                      ) : (
-                        <AiFillCloseCircle className="icon-not-visited" />
-                      )}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr className="no-appointments">
-                  <td colSpan="6">
-                    <div className="empty-state">
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
-                      </svg>
-                      <p>No appointments found</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      </form>
+
+      {loading && <Loading />}
+
+      <section className="kpi-cards" ref={kpiRef}>
+        <div className="kpi-card">
+          <div className="kpi-title">Daily Appointments</div>
+          <div className="kpi-value">{dailyAppointments ?? "-"}</div>
+          <div className="kpi-sub">{selectedDate}</div>
         </div>
-      </div>
-    </section>
+        <div className="kpi-card">
+          <div className="kpi-title">Daily Income</div>
+          <div className="kpi-value">{dailyIncome != null ? `₹ ${dailyIncome}` : "-"}</div>
+          <div className="kpi-sub">{selectedDate}</div>
+        </div>
+      </section>
+
+      <section className="charts-section">
+        <div className="chart-card">
+          <div className="chart-header">
+            <h3>Most Visited Doctors {rangeStart && rangeEnd ? `(${rangeStart} → ${rangeEnd})` : ""}</h3>
+          </div>
+          {topDoctors.length === 0 ? (
+            <div className="empty-chart">No data</div>
+          ) : (
+            <Bar
+              ref={chartRef}
+              data={{
+                labels: topDoctors.map((d) => `${d.firstName} ${d.lastName}`),
+                datasets: [
+                  {
+                    label: "Visits",
+                    data: topDoctors.map((d) => d.count),
+                    backgroundColor: "rgba(99, 102, 241, 0.7)",
+                    borderRadius: 6,
+                    maxBarThickness: 20,
+                    categoryPercentage: 0.55,
+                    barPercentage: 0.55,
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                plugins: {
+                  legend: { display: true, position: "top" },
+                  title: { display: false },
+                },
+                scales: {
+                  x: { ticks: { color: "#475569", maxRotation: 0, minRotation: 0, padding: 6 } },
+                  y: { ticks: { color: "#475569", stepSize: 1 }, beginAtZero: true, precision: 0 },
+                },
+              }}
+            />
+          )}
+        </div>
+      </section>
+    </div>
   );
 };
 
-export default Dashboard;
+export default Reports;
